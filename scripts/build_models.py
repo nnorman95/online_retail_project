@@ -1,128 +1,59 @@
+from pathlib import Path
+
 import psycopg
 
-conn = psycopg.connect("dbname=online_retail_project user=norman")
-cur = conn.cursor()
 
-cur.execute("""
-DROP TABLE IF EXISTS stg_online_retail;
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SQL_DIR = PROJECT_ROOT / "sql"
 
-CREATE TABLE stg_online_retail AS
-SELECT
-    invoice_no,
-    stock_code,
-    NULLIF(TRIM(description), '') AS description,
-    quantity,
-    invoice_date,
-    unit_price,
-    customer_id::INTEGER AS customer_id,
-    country,
-    invoice_no LIKE 'C%' AS is_cancelled,
-    (
-        invoice_no NOT LIKE 'C%'
-        AND quantity > 0
-        AND unit_price > 0
-    ) AS is_valid_sale,
-    quantity * unit_price AS revenue
-FROM raw_online_retail;
-""")
+DB_DSN = "dbname=online_retail_project user=norman"
 
-cur.execute("""
-DROP TABLE IF EXISTS fact_invoice_items;
+MODEL_SQL_FILES = [
+    SQL_DIR / "01_create_staging.sql",
+    SQL_DIR / "02_create_fact_invoice_items.sql",
+    SQL_DIR / "03_create_dim_products.sql",
+    SQL_DIR / "04_create_dim_customers.sql",
+    SQL_DIR / "05_create_mart_daily_sales.sql",
+    SQL_DIR / "06_create_mart_country_sales.sql",
+]
 
-CREATE TABLE fact_invoice_items AS
-SELECT
-    invoice_no,
-    stock_code,
-    quantity,
-    invoice_date,
-    unit_price,
-    customer_id,
-    country,
-    revenue
-FROM stg_online_retail
-WHERE is_valid_sale = TRUE;
-""")
-
-cur.execute("""
-DROP TABLE IF EXISTS dim_products;
-
-CREATE TABLE dim_products AS
-SELECT
-    stock_code,
-    MAX(description) AS product_name
-FROM stg_online_retail
-WHERE is_valid_sale = TRUE
-  AND description IS NOT NULL
-GROUP BY stock_code;
-""")
-
-cur.execute("""
-DROP TABLE IF EXISTS dim_customers;
-
-CREATE TABLE dim_customers AS
-SELECT
-    customer_id,
-    MIN(invoice_date) AS first_purchase_at,
-    MAX(invoice_date) AS last_purchase_at,
-    COUNT(DISTINCT invoice_no) AS total_orders,
-    SUM(revenue) AS total_revenue
-FROM fact_invoice_items
-WHERE customer_id IS NOT NULL
-GROUP BY customer_id;
-""")
-
-cur.execute("""
-DROP TABLE IF EXISTS mart_daily_sales;
-
-CREATE TABLE mart_daily_sales AS
-SELECT
-    invoice_date::DATE AS sales_date,
-    COUNT(DISTINCT invoice_no) AS total_orders,
-    COUNT(*) AS total_items,
-    SUM(quantity) AS total_quantity,
-    ROUND(SUM(revenue), 2) AS total_revenue
-FROM fact_invoice_items
-GROUP BY invoice_date::DATE
-ORDER BY sales_date;
-""")
-
-cur.execute("""
-DROP TABLE IF EXISTS mart_country_sales;
-
-CREATE TABLE mart_country_sales AS
-SELECT
-    country,
-    COUNT(DISTINCT invoice_no) AS total_orders,
-    COUNT(*) AS total_items,
-    SUM(quantity) AS total_quantity,
-    ROUND(SUM(revenue), 2) AS total_revenue
-FROM fact_invoice_items
-GROUP BY country
-ORDER BY total_revenue DESC;
-""")
+VALIDATION_SQL_FILE = SQL_DIR / "07_validate_revenue.sql"
 
 
-cur.execute("""
-SELECT
-    ROUND((SELECT SUM(revenue) FROM fact_invoice_items), 2) AS fact_revenue,
-    ROUND((SELECT SUM(total_revenue) FROM mart_daily_sales), 2) AS daily_mart_revenue,
-    ROUND((SELECT SUM(total_revenue) FROM mart_country_sales), 2) AS country_mart_revenue;
-""")
+def read_sql(file_path):
+    return file_path.read_text(encoding="utf-8")
 
-fact_revenue, daily_mart_revenue, country_mart_revenue = cur.fetchone()
 
-if fact_revenue != daily_mart_revenue or fact_revenue != country_mart_revenue:
-    raise ValueError("Revenue validation failed")
+def run_sql_file(cursor, file_path):
+    cursor.execute(read_sql(file_path))
 
-conn.commit()
 
-print("Revenue validation passed!")
+def validate_revenue(cursor):
+    cursor.execute(read_sql(VALIDATION_SQL_FILE))
 
-print("Built stg_online_retail.")
-print("Built fact_invoice_items.")
-print("Built dim_products.")
-print("Built dim_customers.")
-print("Built mart_daily_sales.")
-print("Built mart_country_sales.")
+    fact_revenue, daily_mart_revenue, country_mart_revenue = cursor.fetchone()
 
-conn.close()
+    if fact_revenue != daily_mart_revenue or fact_revenue != country_mart_revenue:
+        raise ValueError(
+            "Revenue validation failed: "
+            f"fact={fact_revenue}, "
+            f"daily_mart={daily_mart_revenue}, "
+            f"country_mart={country_mart_revenue}"
+        )
+
+
+def main():
+    with psycopg.connect(DB_DSN) as conn:
+        with conn.cursor() as cur:
+            for sql_file in MODEL_SQL_FILES:
+                run_sql_file(cur, sql_file)
+                print(f"Built from {sql_file.name}")
+
+            validate_revenue(cur)
+            conn.commit()
+
+    print("Revenue validation passed!")
+
+
+if __name__ == "__main__":
+    main()
