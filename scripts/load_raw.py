@@ -3,9 +3,10 @@ import io
 import pandas as pd
 import psycopg
 
-file_path = "data/raw/online_retail.xlsx"
+from config import DB_DSN, RAW_FILE_PATH
 
-df = pd.read_excel(file_path)
+
+df = pd.read_excel(RAW_FILE_PATH)
 
 df = df.rename(
     columns={
@@ -33,7 +34,7 @@ columns = [
 
 df = df[columns]
 
-conn = psycopg.connect("dbname=online_retail_project user=norman")
+conn = psycopg.connect(DB_DSN)
 cur = conn.cursor()
 
 cur.execute("TRUNCATE TABLE raw_online_retail;")

@@ -2,11 +2,11 @@ from pathlib import Path
 
 import psycopg
 
+from config import DB_DSN
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SQL_FILE = PROJECT_ROOT / "sql" / "08_data_quality_report.sql"
-
-DB_DSN = "dbname=online_retail_project user=norman"
 
 
 def read_sql(file_path):

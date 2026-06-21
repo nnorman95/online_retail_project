@@ -1,11 +1,11 @@
 import psycopg
 
-conn = psycopg.connect("dbname=online_retail_project user=norman")
-cur = conn.cursor()
+from config import DB_DSN
 
-cur.execute("SELECT current_database(), current_user")
-result = cur.fetchone()
+
+with psycopg.connect(DB_DSN) as conn:
+    with conn.cursor() as cur:
+        cur.execute("SELECT current_database(), current_user")
+        result = cur.fetchone()
 
 print(result)
-
-conn.close()

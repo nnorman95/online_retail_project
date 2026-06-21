@@ -2,11 +2,10 @@ from pathlib import Path
 
 import psycopg
 
+from config import DB_DSN
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SQL_DIR = PROJECT_ROOT / "sql"
-
-DB_DSN = "dbname=online_retail_project user=norman"
 
 MODEL_SQL_FILES = [
     SQL_DIR / "01_create_staging.sql",
