@@ -283,13 +283,3 @@ This is a local first version of the project. Some parts are intentionally still
 * there are no automated tests yet
 * product naming logic is simple and can be improved
 * SQL files are executed by a Python script instead of a dedicated transformation tool like dbt
-
-## Planned Improvements
-
-* move database settings into a small config file
-* add a more detailed data quality report
-* add dbt models
-* add scheduling with cron or Airflow
-* add a small dashboard
-* add Docker for easier local setup
-* add basic automated checks
